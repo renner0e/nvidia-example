@@ -1,10 +1,16 @@
+ARG FEDORA_MAJOR_VERSION=45
+ARG BASE_IMAGE=kinoite
 # Allow build scripts to be referenced without being copied into the final image
 FROM scratch AS ctx
 COPY build_files /
 COPY system_files /system_files
 
+FROM ghcr.io/ublue-os/akmods-nvidia-open:main-${FEDORA_MAJOR_VERSION} AS akmods-nvidia-open
+
 # Base Image
-FROM ghcr.io/ublue-os/bazzite:stable
+FROM quay.io/fedora-ostree-desktops/${BASE_IMAGE}:${FEDORA_MAJOR_VERSION} AS base
+ENV BASE_IMAGE=${BASE_IMAGE}
+
 ## Other possible base images include:
 # FROM ghcr.io/ublue-os/bazzite:testing
 # FROM ghcr.io/ublue-os/aurora:stable
@@ -35,6 +41,20 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=cache,dst=/var/log \
     --mount=type=tmpfs,dst=/tmp \
     /ctx/build.sh
+
+FROM base AS nvidia
+
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,dst=/var/cache \
+    --mount=type=cache,dst=/var/log \
+    --mount=type=tmpfs,dst=/tmp \
+    --mount=type=bind,from=akmods-nvidia-open,src=/rpms,dst=/tmp/rpms/nvidia \
+    --mount=type=bind,from=akmods-nvidia-open,src=/kernel-rpms,dst=/tmp/kernel-rpms \
+    /ctx/kernel.sh && \
+    /ctx/nvidia.sh && \
+    /ctx/initramfs.sh
+
+RUN rm -rf /var/* /boot/* /boot/.*
 
 ### LINTING
 ## Verify final image and contents are correct.
